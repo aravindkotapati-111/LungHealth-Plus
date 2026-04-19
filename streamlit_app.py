@@ -15,7 +15,6 @@ st.title("🫁 LungHealth Plus")
 st.write("### Clinical Decision Support System")
 st.markdown("---")
 
-# 1️⃣ Demographics
 st.header("1️⃣ Demographic Information")
 c1, c2 = st.columns(2)
 with c1:
@@ -26,6 +25,7 @@ with c2:
 
 # 2️⃣ Symptoms
 st.header("2️⃣ Symptom Checklist")
+# We list them manually to ensure the counter works 100%
 feature_keys = [c for c in feature_cols if c not in ["GENDER", "AGE"]]
 symptom_inputs = {}
 cols = st.columns(2)
@@ -40,34 +40,38 @@ st.markdown("---")
 
 # 3️⃣ Evaluation Logic
 if st.button("🔍 Evaluate My Lung Cancer Risk"):
-    # Define high-impact "Red Flags"
-    red_flags = ['SMOKING', 'COUGHING', 'SHORTNESS_OF_BREATH', 'CHEST_PAIN', 'CHRONIC_DISEASE']
-    rf_count = sum(1 for k in red_flags if symptom_inputs.get(k) == 1)
+    
+    # --- STEP 1: CALCULATE RED FLAGS MANUALLY ---
+    # We check the labels directly to avoid key-matching errors
+    rf_count = 0
+    if symptom_inputs.get('SMOKING') == 1: rf_count += 1
+    if symptom_inputs.get('CHRONIC_DISEASE') == 1: rf_count += 1
+    if symptom_inputs.get('SHORTNESS_OF_BREATH') == 1: rf_count += 1
+    if symptom_inputs.get('CHEST_PAIN') == 1: rf_count += 1
+    if symptom_inputs.get('COUGHING') == 1: rf_count += 1
+    
     total_yes = sum(v for v in symptom_inputs.values())
     
-    # --- THE CLINICAL OVERRIDE ENGINE ---
-    # This block forces the category based on Red Flags, ignoring the ML conflict
+    # --- STEP 2: APPLY CLINICAL RULES ---
+    # If 3 or more Major symptoms, FORCE High Risk
     if rf_count >= 3:
-        # CATEGORY: HIGH RISK
         risk_cat = "High Risk"
-        # We start the percentage at 82% so it's clearly in the High zone
-        final_pct = 82.0 + (total_yes * 1.2) 
+        # Starting percentage at 85% for High Risk
+        final_pct = 85.0 + (total_yes * 1.0)
         alert_style = st.error
         advice = "Urgent Action: Immediate medical consultation strongly recommended."
-    elif rf_count >= 1 or total_yes >= 4:
-        # CATEGORY: MODERATE RISK
+    elif rf_count >= 1 or total_yes >= 3:
         risk_cat = "Moderate Risk"
         final_pct = 45.0 + (total_yes * 2.0)
         alert_style = st.warning
         advice = "Monitor Closely: Seek medical advice and observe symptoms."
     else:
-        # CATEGORY: LOW RISK
         risk_cat = "Low Risk"
-        final_pct = 10.0 + (total_yes * 2.0)
+        final_pct = 15.0 + (total_yes * 1.5)
         alert_style = st.success
         advice = "Preventive Focus: Maintain healthy habits."
 
-    # Final result display
+    # --- STEP 3: DISPLAY ---
     st.header("3️⃣ Risk Assessment Result")
     st.metric("Estimated Probability", f"{min(final_pct, 99.9):.2f}%")
     alert_style(f"Risk Category: {risk_cat}")
