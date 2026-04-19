@@ -9,11 +9,11 @@ try:
 except Exception as e:
     st.error("Model files not found. Ensure .joblib files are in your repository.")
 
-# ---------- 2. CLINICAL TRIAGE LOGIC (5-POINT ACCURACY) ----------
+# ---------- 2. CLINICAL TRIAGE LOGIC (5-POINT WEIGHTING) ----------
 def get_triage_score(inputs):
     """
     Weights: Smoking(5), Coughing(5), SOB(5), Chest Pain(5), Chronic Disease(5).
-    Others vary from 1-3.
+    Wheezing(3), Swallowing(3). Others(1).
     """
     weights = {
         'SMOKING': 5, 'COUGHING': 5, 'SHORTNESS_OF_BREATH': 5, 
@@ -25,13 +25,14 @@ def get_triage_score(inputs):
     
     total_score = sum(weights[k] for k, v in inputs.items() if v == 1 and k in weights)
     
-    # Thresholds: High >= 12 | Moderate 5-11 | Low < 5
-    if total_score >= 12:
-        return "High Risk"
+    # Clinical Thresholds:
+    # High >= 15 | Moderate 5-14 | Low < 5
+    if total_score >= 15:
+        return "High Risk", total_score
     elif total_score >= 5:
-        return "Moderate Risk"
+        return "Moderate Risk", total_score
     else:
-        return "Low Risk"
+        return "Low Risk", total_score
 
 # ---------- 3. STREAMLIT UI ----------
 st.set_page_config(page_title="LungHealth+ Screener", page_icon="🫁")
@@ -64,33 +65,33 @@ if st.button("🔍 Evaluate My Lung Cancer Risk"):
     row = {col: (gender_value if col == "GENDER" else (age_value if col == "AGE" else symptom_inputs[col])) for col in feature_cols}
     input_df = pd.DataFrame([row], columns=feature_cols)
 
-    # Get the raw statistical probability from the AI model
-    prob_raw = model.predict_proba(input_df)[0][1]
+    # Statistical AI Probability
+    prob_raw = model.predict_proba(input_df)[0][1] * 100
     
-    # Determine the Category
-    risk_level = get_triage_score(symptom_inputs)
+    # Clinical Category
+    risk_level, score = get_triage_score(symptom_inputs)
     
-    # --- DYNAMIC VISUAL CALIBRATION ---
-    # This section makes the number move up as you add symptoms
+    # --- EXPLANATION OF THE "JUMP" ---
+    # We use the score to move the percentage up within the category
     if risk_level == "High Risk":
-        # Percentage starts at 75% and moves up toward 99% based on symptoms
-        display_percent = max(prob_raw * 100, 75.0) + (len([v for v in symptom_inputs.values() if v == 1]) * 1.5)
-        display_percent = min(display_percent, 99.45) # Cap at 99%
+        # Jumps to 75%+ because it hit the High Risk threshold
+        display_percent = max(prob_raw, 75.0) + (score * 0.5)
+        display_percent = min(display_percent, 98.80)
         box_msg = "Urgent Action: Immediate medical consultation and professional screening strongly recommended."
         color_box = st.error 
     elif risk_level == "Moderate Risk":
-        # Percentage moves dynamically between 42% and 72%
-        display_percent = max(prob_raw * 100, 42.0) + (len([v for v in symptom_inputs.values() if v == 1]) * 2.0)
-        display_percent = min(display_percent, 72.0) # Stay below High Risk threshold
+        # Stays between 35% and 70%
+        display_percent = max(prob_raw, 35.0) + (score * 1.2)
+        display_percent = min(display_percent, 70.0)
         box_msg = "Monitor Closely: Seek medical advice soon, observe symptoms, and improve lifestyle habits."
         color_box = st.warning
     else:
-        # Low risk stays below 30%
-        display_percent = min(prob_raw * 100, 29.0)
+        # Low risk
+        display_percent = min(prob_raw, 30.0)
         box_msg = "Preventive Focus: Maintain healthy habits and re-evaluate annually."
         color_box = st.success
 
-    # --- OUTPUT DISPLAY ---
+    # --- FINAL UI ---
     st.header("3️⃣ Risk Assessment Result")
     st.subheader("Model Estimate")
     st.metric("Estimated Probability of Lung Cancer", f"{display_percent:.2f}%")
@@ -98,10 +99,5 @@ if st.button("🔍 Evaluate My Lung Cancer Risk"):
     st.write(box_msg)
     
     st.markdown("---")
-    st.caption("Insight: Risk increases as more clinical markers are identified.")
+    st.caption(f"Clinical Triage Score: {score} pts. (High-impact symptoms significantly increase risk priority.)")
     st.progress(display_percent / 100)
-
-else:
-    st.info("Select symptoms and click evaluate to see the results.")
-
-    # The
