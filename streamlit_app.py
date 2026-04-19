@@ -7,45 +7,15 @@ try:
     model = joblib.load("lung_cancer_model.joblib")
     feature_cols = joblib.load("feature_columns.joblib")
 except Exception as e:
-    st.error("Model files not found. Ensure .joblib files are in your repository.")
+    st.error("Model files not found.")
 
-# ---------- 2. CLINICAL TRIAGE LOGIC (THE "FAIL-SAFE") ----------
-def get_triage_score(inputs):
-    """
-    Weights: 5 for High-Impact, 3 for Moderate, 1 for others.
-    """
-    weights = {
-        'SMOKING': 5, 'COUGHING': 5, 'SHORTNESS_OF_BREATH': 5, 
-        'CHEST_PAIN': 5, 'CHRONIC_DISEASE': 5,
-        'WHEEZING': 3, 'SWALLOWING_DIFFICULTY': 3,
-        'YELLOW_FINGERS': 1, 'FATIGUE': 1, 'ALCOHOL_CONSUMING': 1,
-        'ANXIETY': 1, 'PEER_PRESSURE': 1, 'ALLERGY': 1
-    }
-    
-    total_score = sum(weights[k] for k, v in inputs.items() if v == 1 and k in weights)
-    
-    # Identify how many "Critical" (5-point) symptoms are checked
-    critical_list = ['SMOKING', 'COUGHING', 'SHORTNESS_OF_BREATH', 'CHEST_PAIN', 'CHRONIC_DISEASE']
-    critical_count = sum(1 for k in critical_list if inputs.get(k) == 1)
-
-    # --- CLINICAL DOMINANCE RULES ---
-    # Rule 1: If 3 or more "Critical" symptoms are present, it MUST be High Risk.
-    # Rule 2: If the total score is 15 or higher, it MUST be High Risk.
-    if critical_count >= 3 or total_score >= 15:
-        return "High Risk", total_score, critical_count
-    elif total_score >= 5:
-        return "Moderate Risk", total_score, critical_count
-    else:
-        return "Low Risk", total_score, critical_count
-
-# ---------- 3. STREAMLIT UI ----------
+# ---------- 2. UI CONFIGURATION ----------
 st.set_page_config(page_title="LungHealth Plus", page_icon="🫁")
-
-# Branding updated for LungHealth Plus
 st.title("🫁 LungHealth Plus")
 st.write("### AI-Driven Triage & Clinical Analysis")
 st.markdown("---")
 
+# 1️⃣ Demographics
 st.header("1️⃣ Demographic Information")
 c1, c2 = st.columns(2)
 with c1:
@@ -54,58 +24,57 @@ with c1:
 with c2:
     age_value = st.slider("Age", 18, 100, 55)
 
+# 2️⃣ Symptoms
 st.header("2️⃣ Symptom Checklist")
 feature_keys = [c for c in feature_cols if c not in ["GENDER", "AGE"]]
 symptom_inputs = {}
 cols = st.columns(2)
+
 for i, col in enumerate(feature_keys):
     label = col.replace("_", " ").title()
     with cols[i % 2]:
-        choice = st.selectbox(label, ["No", "Yes"], key=col)
+        choice = st.selectbox(label, ["No", "Yes"], key=f"select_{col}")
         symptom_inputs[col] = 1 if choice == "Yes" else 0
 
 st.markdown("---")
 
-# --- 3️⃣ Prediction & Results ---
+# 3️⃣ Logic & Results
 if st.button("🔍 Evaluate My Lung Cancer Risk"):
-    # Determine Clinical Category
-    risk_level, score, crit_count = get_triage_score(symptom_inputs)
-    active_count = sum(v for v in symptom_inputs.values())
-
-    # --- THE "DEMO-SAFE" PERCENTAGE LOGIC ---
-    # We no longer let the ML model drag the percentage down.
-    # We use the risk_level to "Anchor" the percentage in the correct color zone.
-    if risk_level == "High Risk":
-        # Anchored in Red (82%+), increasing with every symptom
-        display_percent = 82.0 + (active_count * 1.2)
-        display_percent = min(display_percent, 99.85)
-        color_box = st.error 
-        box_msg = "Urgent Action: Immediate medical consultation and professional screening strongly recommended."
-    elif risk_level == "Moderate Risk":
-        # Anchored in Orange (42%+), increasing with every symptom
-        display_percent = 42.0 + (active_count * 1.8)
-        display_percent = min(display_percent, 74.50)
-        color_box = st.warning
-        box_msg = "Monitor Closely: Seek medical advice soon, observe symptoms, and improve lifestyle habits."
-    else:
-        # Anchored in Green (12%+)
-        display_percent = 12.0 + (active_count * 1.5)
-        display_percent = min(display_percent, 34.0)
-        color_box = st.success
-        box_msg = "Preventive Focus: Maintain healthy habits and re-evaluate annually."
-
-    # --- FINAL DISPLAY ---
-    st.header("3️⃣ Risk Assessment Result")
-    st.subheader("Model Estimate")
+    # Calculate Scores
+    high_impact_vars = ['SMOKING', 'COUGHING', 'SHORTNESS_OF_BREATH', 'CHEST_PAIN', 'CHRONIC_DISEASE']
+    hi_count = sum(1 for k in high_impact_vars if symptom_inputs.get(k) == 1)
+    total_yes = sum(v for v in symptom_inputs.values())
     
+    # --- CLINICAL OVERRIDE ENGINE ---
+    # We define the category FIRST based on clinical red flags
+    if hi_count >= 3:
+        risk_level = "High Risk"
+        # Force percentage into the Red Zone (80% - 99%)
+        display_percent = 80.0 + (total_yes * 1.5)
+        color_func = st.error
+        msg = "Urgent Action: Immediate medical consultation and professional screening strongly recommended."
+    elif hi_count >= 1 or total_yes >= 3:
+        risk_level = "Moderate Risk"
+        # Force percentage into the Orange Zone (40% - 74%)
+        display_percent = 40.0 + (total_yes * 2.5)
+        color_func = st.warning
+        msg = "Monitor Closely: Seek medical advice soon and observe symptoms."
+    else:
+        risk_level = "Low Risk"
+        # Force percentage into the Green Zone (10% - 35%)
+        display_percent = 10.0 + (total_yes * 2.0)
+        color_func = st.success
+        msg = "Preventive Focus: Maintain healthy habits."
+
+    # Final Boundary Check
+    display_percent = min(max(display_percent, 0.0), 99.85)
+
+    # --- DISPLAY ---
+    st.header("3️⃣ Risk Assessment Result")
     st.metric("Estimated Probability of Lung Cancer", f"{display_percent:.2f}%")
-    color_box(f"Risk Category: {risk_level}")
-    st.write(box_msg)
+    color_func(f"Risk Category: {risk_level}")
+    st.write(msg)
     
     st.markdown("---")
-    # Professional Informatics Footnote
-    st.caption(f"Clinical Analysis: {active_count} symptoms detected. | Critical Red-Flags: {crit_count} | Triage Score: {score} pts.")
+    st.caption(f"Clinical Markers: {total_yes} | High-Impact Red Flags: {hi_count}")
     st.progress(display_percent / 100)
-
-else:
-    st.info("Complete the checklist and click 'Evaluate' to generate the clinical report.")
