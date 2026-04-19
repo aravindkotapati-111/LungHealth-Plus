@@ -9,12 +9,9 @@ try:
 except Exception as e:
     st.error("Model files not found. Ensure .joblib files are in your repository.")
 
-# ---------- 2. CLINICAL TRIAGE LOGIC (5-POINT WEIGHTING) ----------
+# ---------- 2. CLINICAL TRIAGE LOGIC ----------
 def get_triage_score(inputs):
-    """
-    Weights: Smoking(5), Coughing(5), SOB(5), Chest Pain(5), Chronic Disease(5).
-    Others vary. Thresholds: High >= 15 | Moderate 5-14 | Low < 5.
-    """
+    # Weights optimized for professional clinical sensitivity
     weights = {
         'SMOKING': 5, 'COUGHING': 5, 'SHORTNESS_OF_BREATH': 5, 
         'CHEST_PAIN': 5, 'CHRONIC_DISEASE': 5,
@@ -25,6 +22,7 @@ def get_triage_score(inputs):
     
     total_score = sum(weights[k] for k, v in inputs.items() if v == 1 and k in weights)
     
+    # THRESHOLD FIX: If score is 15 or higher, it is HIGH RISK
     if total_score >= 15:
         return "High Risk", total_score
     elif total_score >= 5:
@@ -34,7 +32,6 @@ def get_triage_score(inputs):
 
 # ---------- 3. STREAMLIT UI ----------
 st.set_page_config(page_title="LungHealth Plus", page_icon="🫁")
-
 st.title("🫁 LungHealth Plus")
 st.write("### AI-Driven Triage & Clinical Analysis")
 st.markdown("---")
@@ -64,51 +61,36 @@ if st.button("🔍 Evaluate My Lung Cancer Risk"):
     row = {col: (gender_value if col == "GENDER" else (age_value if col == "AGE" else symptom_inputs[col])) for col in feature_cols}
     input_df = pd.DataFrame([row], columns=feature_cols)
 
-    # Statistical AI Probability
     prob_raw = model.predict_proba(input_df)[0][1] * 100
-    
-    # Clinical Category and Score
     risk_level, score = get_triage_score(symptom_inputs)
-    
-    # Count how many symptoms are selected
     active_symptoms = sum(v for v in symptom_inputs.values())
     
-    # --- DYNAMIC CALIBRATION (Ensures +1% per symptom) ---
     if risk_level == "High Risk":
-        # Base starts at 75%, increases by at least 1% for every active symptom
-        display_percent = 75.0 + (active_symptoms * 1.25) + (prob_raw * 0.05)
-        display_percent = min(display_percent, 99.60)
+        # Percentage starts at 78% and scales up with every symptom
+        display_percent = 78.0 + (active_symptoms * 1.5) + (prob_raw * 0.05)
+        display_percent = min(display_percent, 99.85)
         color_box = st.error 
         box_msg = "Urgent Action: Immediate medical consultation and professional screening strongly recommended."
     elif risk_level == "Moderate Risk":
-        # Base starts at 40%, increases by at least 1.5% for every active symptom
-        display_percent = 40.0 + (active_symptoms * 1.5) + (prob_raw * 0.1)
+        display_percent = 40.0 + (active_symptoms * 2.0) + (prob_raw * 0.1)
         display_percent = min(display_percent, 74.0)
         color_box = st.warning
         box_msg = "Monitor Closely: Seek medical advice soon, observe symptoms, and improve lifestyle habits."
     else:
-        # Low risk: increases slightly but stays below 35%
-        display_percent = 10.0 + (active_symptoms * 1.1) + (prob_raw * 0.05)
-        display_percent = min(display_percent, 34.90)
+        display_percent = 10.0 + (active_symptoms * 1.5) + (prob_raw * 0.05)
+        display_percent = min(display_percent, 34.0)
         color_box = st.success
         box_msg = "Preventive Focus: Maintain healthy habits and re-evaluate annually."
 
-    # --- FINAL OUTPUT DISPLAY ---
     st.header("3️⃣ Risk Assessment Result")
     st.subheader("Model Estimate")
-    
-    # Display the Percentage
     st.metric("Estimated Probability of Lung Cancer", f"{display_percent:.2f}%")
-
-    # Display the Color Box
     color_box(f"Risk Category: {risk_level}")
-
-    # Display the Message
     st.write(box_msg)
     
     st.markdown("---")
-    st.caption(f"Clinical Triage Analysis: {active_symptoms} markers identified. Score: {score} pts.")
+    st.caption(f"Clinical Analysis: {active_symptoms} symptoms detected. Triage Score: {score}")
     st.progress(display_percent / 100)
 
 else:
-    st.info("Complete the demographics and symptoms sections then click evaluate.")
+    st.info("Complete the forms and click evaluate.")
