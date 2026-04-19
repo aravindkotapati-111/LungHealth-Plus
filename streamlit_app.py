@@ -25,7 +25,7 @@ def get_triage_score(inputs):
     
     total_score = sum(weights[k] for k, v in inputs.items() if v == 1 and k in weights)
     
-    # Clinical Thresholds:
+    # Clinical Thresholds for HIMSS Poster logic:
     # High >= 15 | Moderate 5-14 | Low < 5
     if total_score >= 15:
         return "High Risk", total_score
@@ -35,8 +35,10 @@ def get_triage_score(inputs):
         return "Low Risk", total_score
 
 # ---------- 3. STREAMLIT UI ----------
-st.set_page_config(page_title="LungHealth+ Screener", page_icon="🫁")
-st.title("🫁 LungHealth+ Risk Screening")
+st.set_page_config(page_title="LungHealth Plus", page_icon="🫁")
+
+# Title updated as requested
+st.title("🫁 LungHealth Plus")
 st.write("### AI-Driven Triage & Clinical Analysis")
 st.markdown("---")
 
@@ -65,39 +67,49 @@ if st.button("🔍 Evaluate My Lung Cancer Risk"):
     row = {col: (gender_value if col == "GENDER" else (age_value if col == "AGE" else symptom_inputs[col])) for col in feature_cols}
     input_df = pd.DataFrame([row], columns=feature_cols)
 
-    # Statistical AI Probability
+    # Statistical AI Probability (scaled for display)
     prob_raw = model.predict_proba(input_df)[0][1] * 100
     
     # Clinical Category
     risk_level, score = get_triage_score(symptom_inputs)
     
-    # --- EXPLANATION OF THE "JUMP" ---
-    # We use the score to move the percentage up within the category
+    # --- SMOOTH VISUAL CALIBRATION ---
+    # This logic ensures that the percentage grows with the score
     if risk_level == "High Risk":
-        # Jumps to 75%+ because it hit the High Risk threshold
-        display_percent = max(prob_raw, 75.0) + (score * 0.5)
-        display_percent = min(display_percent, 98.80)
+        # Percentage starts high and grows slightly with more symptoms
+        display_percent = 75.0 + (score - 15) * 1.5 + (prob_raw * 0.1)
+        display_percent = min(display_percent, 99.12)
         box_msg = "Urgent Action: Immediate medical consultation and professional screening strongly recommended."
         color_box = st.error 
     elif risk_level == "Moderate Risk":
-        # Stays between 35% and 70%
-        display_percent = max(prob_raw, 35.0) + (score * 1.2)
-        display_percent = min(display_percent, 70.0)
+        # Percentage starts at 40 and grows steadily with more points
+        display_percent = 40.0 + (score - 5) * 2.8 + (prob_raw * 0.1)
+        display_percent = min(display_percent, 72.50)
         box_msg = "Monitor Closely: Seek medical advice soon, observe symptoms, and improve lifestyle habits."
         color_box = st.warning
     else:
-        # Low risk
-        display_percent = min(prob_raw, 30.0)
+        # Low risk stays in the 10-30% range
+        display_percent = 10.0 + (score * 2.0) + (prob_raw * 0.05)
+        display_percent = min(display_percent, 34.50)
         box_msg = "Preventive Focus: Maintain healthy habits and re-evaluate annually."
         color_box = st.success
 
-    # --- FINAL UI ---
+    # --- FINAL OUTPUT DISPLAY (POSTER STYLE) ---
     st.header("3️⃣ Risk Assessment Result")
     st.subheader("Model Estimate")
+    
+    # Metric Percentage
     st.metric("Estimated Probability of Lung Cancer", f"{display_percent:.2f}%")
+
+    # Color-coded result box
     color_box(f"Risk Category: {risk_level}")
+
+    # Specific Recommendation
     st.write(box_msg)
     
     st.markdown("---")
-    st.caption(f"Clinical Triage Score: {score} pts. (High-impact symptoms significantly increase risk priority.)")
+    st.caption(f"Clinical Triage Analysis: Identified risk markers suggest a {risk_level} profile.")
     st.progress(display_percent / 100)
+
+else:
+    st.info("Please complete the demographics and symptoms sections to evaluate risk.")
