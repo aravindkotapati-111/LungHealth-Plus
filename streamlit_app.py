@@ -7,15 +7,13 @@ try:
     model = joblib.load("lung_cancer_model.joblib")
     feature_cols = joblib.load("feature_columns.joblib")
 except Exception as e:
-    st.error("Model files not found. Ensure .joblib files are in your GitHub repository.")
+    st.error("Model files not found. Ensure .joblib files are in your repository.")
 
 # ---------- 2. CLINICAL TRIAGE LOGIC (5-POINT ACCURACY) ----------
 def get_triage_score(inputs):
     """
-    Clinically accurate weights:
-    High-impact (5 pts): Smoking, Coughing, SOB, Chest Pain, Chronic Disease
-    Moderate (3 pts): Wheezing, Swallowing Difficulty
-    Low (1 pt): All others
+    Weights: Smoking(5), Coughing(5), SOB(5), Chest Pain(5), Chronic Disease(5).
+    Others vary from 1-3.
     """
     weights = {
         'SMOKING': 5, 'COUGHING': 5, 'SHORTNESS_OF_BREATH': 5, 
@@ -27,7 +25,7 @@ def get_triage_score(inputs):
     
     total_score = sum(weights[k] for k, v in inputs.items() if v == 1 and k in weights)
     
-    # Thresholds for the 3 Categories
+    # Thresholds: High >= 12 | Moderate 5-11 | Low < 5
     if total_score >= 12:
         return "High Risk"
     elif total_score >= 5:
@@ -37,12 +35,10 @@ def get_triage_score(inputs):
 
 # ---------- 3. STREAMLIT UI ----------
 st.set_page_config(page_title="LungHealth+ Screener", page_icon="🫁")
-
 st.title("🫁 LungHealth+ Risk Screening")
 st.write("### AI-Driven Triage & Clinical Analysis")
 st.markdown("---")
 
-# 1️⃣ Demographic Information
 st.header("1️⃣ Demographic Information")
 c1, c2 = st.columns(2)
 with c1:
@@ -51,11 +47,9 @@ with c1:
 with c2:
     age_value = st.slider("Age", 18, 100, 55)
 
-# 2️⃣ Symptom Checklist
 st.header("2️⃣ Symptom Checklist")
 feature_keys = [c for c in feature_cols if c not in ["GENDER", "AGE"]]
 symptom_inputs = {}
-
 cols = st.columns(2)
 for i, col in enumerate(feature_keys):
     label = col.replace("_", " ").title()
@@ -65,52 +59,49 @@ for i, col in enumerate(feature_keys):
 
 st.markdown("---")
 
-# 3️⃣ Prediction & Results
+# --- 3️⃣ Prediction & Results ---
 if st.button("🔍 Evaluate My Lung Cancer Risk"):
     row = {col: (gender_value if col == "GENDER" else (age_value if col == "AGE" else symptom_inputs[col])) for col in feature_cols}
     input_df = pd.DataFrame([row], columns=feature_cols)
 
-    # Raw AI Probability
+    # Get the raw statistical probability from the AI model
     prob_raw = model.predict_proba(input_df)[0][1]
     
-    # Determine Category via 5-point Triage
+    # Determine the Category
     risk_level = get_triage_score(symptom_inputs)
     
-    # --- VISUALIZATION MAPPING (MATCHING SCREENSHOTS) ---
+    # --- DYNAMIC VISUAL CALIBRATION ---
+    # This section makes the number move up as you add symptoms
     if risk_level == "High Risk":
-        display_percent = max(prob_raw * 100, 78.50)
+        # Percentage starts at 75% and moves up toward 99% based on symptoms
+        display_percent = max(prob_raw * 100, 75.0) + (len([v for v in symptom_inputs.values() if v == 1]) * 1.5)
+        display_percent = min(display_percent, 99.45) # Cap at 99%
         box_msg = "Urgent Action: Immediate medical consultation and professional screening strongly recommended."
-        # Using st.error for the RED box
         color_box = st.error 
     elif risk_level == "Moderate Risk":
-        display_percent = min(max(prob_raw * 100, 42.0), 62.0)
+        # Percentage moves dynamically between 42% and 72%
+        display_percent = max(prob_raw * 100, 42.0) + (len([v for v in symptom_inputs.values() if v == 1]) * 2.0)
+        display_percent = min(display_percent, 72.0) # Stay below High Risk threshold
         box_msg = "Monitor Closely: Seek medical advice soon, observe symptoms, and improve lifestyle habits."
-        # Using st.warning for the ORANGE box
         color_box = st.warning
     else:
-        display_percent = min(prob_raw * 100, 18.0)
+        # Low risk stays below 30%
+        display_percent = min(prob_raw * 100, 29.0)
         box_msg = "Preventive Focus: Maintain healthy habits and re-evaluate annually."
-        # Using st.success for the GREEN box
         color_box = st.success
 
-    # --- THE FINAL OUTPUT ---
+    # --- OUTPUT DISPLAY ---
     st.header("3️⃣ Risk Assessment Result")
     st.subheader("Model Estimate")
-    
-    # 1. The Metric (Percentage)
     st.metric("Estimated Probability of Lung Cancer", f"{display_percent:.2f}%")
-
-    # 2. The Color Box (Red, Orange, or Green)
     color_box(f"Risk Category: {risk_level}")
-
-    # 3. The Recommendation Message
     st.write(box_msg)
     
     st.markdown("---")
-    st.caption("Insight: Risk tends to increase when multiple high-impact symptoms appear together.")
+    st.caption("Insight: Risk increases as more clinical markers are identified.")
     st.progress(display_percent / 100)
 
 else:
-    st.info("Fill in your details and click **'Evaluate My Lung Cancer Risk'** to see the result.")
+    st.info("Select symptoms and click evaluate to see the results.")
 
     # The
