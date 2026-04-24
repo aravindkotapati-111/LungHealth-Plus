@@ -11,8 +11,11 @@ except:
 
 # ---------- 2. UI SETUP ----------
 st.set_page_config(page_title="LungHealth Plus", page_icon="🫁")
-st.title("🫁 LungHealth Plus")
-st.write("### AI-Driven Clinical Decision Support")
+
+# UPDATED HEADERS
+st.title("🫁 Lung Cancer Risk Screening")
+st.write("### LungHealth Plus: AI-Driven Clinical Decision Support")
+st.info("**Disclaimer:** This is for education and awareness only. It is not a medical diagnosis. Always consult a healthcare professional.")
 st.markdown("---")
 
 # 1️⃣ Demographics
@@ -42,7 +45,6 @@ st.markdown("---")
 if st.button("🔍 Evaluate My Lung Cancer Risk"):
     
     # --- STEP 1: MANUALLY COUNT RED FLAGS (5-Point Symptoms) ---
-    # Using keyword matching to avoid naming errors
     rf_count = 0
     for key, value in symptom_inputs.items():
         if value == 1:
@@ -53,30 +55,24 @@ if st.button("🔍 Evaluate My Lung Cancer Risk"):
     total_yes = sum(v for v in symptom_inputs.values())
     
     # --- STEP 2: TIERED CLINICAL RULES ---
-    
-    # TIER A: HIGH RISK (3+ Major Red Flags)
     if rf_count >= 3:
         risk_cat = "High Risk"
         final_pct = 82.0 + (total_yes * 1.2)
         alert_style = st.error
         advice = "Urgent Action: Immediate medical consultation and screening strongly recommended."
         
-    # TIER B: MODERATE RISK (1-2 Major Red Flags OR very high volume of minor symptoms)
     elif rf_count >= 1 or total_yes >= 5:
         risk_cat = "Moderate Risk"
         final_pct = 42.0 + (total_yes * 2.0)
         alert_style = st.warning
         advice = "Monitor Closely: Seek medical advice soon and observe symptom progression."
         
-    # TIER C: LOW RISK (Only minor symptoms and fewer than 5 total)
     else:
         risk_cat = "Low Risk"
-        # Scales slowly, staying under the 35% threshold
         final_pct = 10.0 + (total_yes * 4.0)
         alert_style = st.success
         advice = "Preventive Focus: Maintain healthy habits and re-evaluate annually."
 
-    # Final boundary check to stay within 0-100
     final_pct = min(max(final_pct, 0.0), 99.85)
 
     # --- STEP 3: DISPLAY RESULTS ---
@@ -86,7 +82,6 @@ if st.button("🔍 Evaluate My Lung Cancer Risk"):
     st.write(f"**Clinical Recommendation:** {advice}")
     
     st.markdown("---")
-    # This breakdown is key for your HIMSS presentation
     st.caption(f"Informatics Breakdown: {rf_count} Red-Flags detected. Total Symptom Load: {total_yes}")
     st.progress(final_pct / 100)
 
